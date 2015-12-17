@@ -134,7 +134,11 @@ Data Blog            </a>
 <h3>Grafana</h3>
 <p>I haven't experimented very much with the visualization front-end but went straight for <a href="http://grafana.org/">Grafana</a>. It was designed to be used with Graphite, but it is now possible to seamlessly insert Prometheus as a data source. Grafana looks good, has nice functionality, and seems fairly general so it seemed like a pretty safe choice. </p>
 <h2>Connecting Spark with Prometheus</h2>
+<<<<<<< HEAD
 <p class="alert alert-info"><strong>Note:</strong> Before you continue here, make sure your Prometheus instance is running and you can reach it at <a href="http://localhost:9090">http://localhost:9090</a> or whatever other port you configured.</p>
+=======
+<p class="alert alert-info"><strong>Note:</strong> Before you continue here, make sure your Prometheus instance is running and you can reach it at http://localhost:9090 or whatever other port you configured.</p>
+>>>>>>> 2fcc23d480a2e429e4ed9b251d285de8df46c2ec
 
 <p>Spark doesn't have Prometheus as one of the pre-packaged sinks - so the strategy here is to export Graphite metrics feed them into Prometheus via an exporter plugin. To report metrics to Graphite, you must set up metrics via a <code>metrics.properties</code> file. You can put this in <code>$SPARK_HOME/config</code> or pass it to spark on the command line by using  <code>--conf spark.metrics.conf=/path/to/metrics/file</code> - beware that this path must either exist on all executors. Alternatively you can pass the file to the executors using the <code>--file</code> flag. </p>
 <p>My <code>metrics.properties</code> looks like this: </p>
