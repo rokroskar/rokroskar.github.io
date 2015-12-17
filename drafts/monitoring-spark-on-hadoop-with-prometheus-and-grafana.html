@@ -120,7 +120,11 @@ Data Blog            </a>
 <p>The second is slightly more complex - we are running a 250+ node "test" Spark/Hadoop cluster on somewhat outdated hardware that is being used a sandbox before we purchase a modern state-of-the-art machine. Benchmarks like Terasort on Hadoop or the <a href="https://github.com/databricks/spark-perf">spark-perf</a> test suite give you timing information but not very much data on what the system is actually doing. What are the raw disk I/O rates on individual nodes? Is the network being saturated? Is HDFS performance hampered by slow disks, network, cpu? When we run the same benchmark on a new system and get a (hopefully) improved time, which of these factors was most important and where could we perhaps downgrade components to save money without sacrificing performance? To answer these questions we really need instrumentation and monitoring. </p>
 <h2>Choices of monitoring backend and visualization</h2>
 <h3>Graphite</h3>
+<<<<<<< HEAD
 <p>The widely-adopted general-purpose monitoring choice seems to be <a href="http://graphite.readthedocs.org/en/1.0/overview.html">Graphite</a>. I found it pretty difficult to set up, owing to inconsistent documentation (for example, the top google hit for <a href="https://www.google.ch/webhp?sourceid=chrome-instant&amp;ion=1&amp;espv=2&amp;ie=UTF-8#q=graphite%20monitoring">"graphite monitoring"</a> takes you to outdated docs) and many components that need to play nice together. I spent a day configuring graphite/carbon and had a working system after some headache. When I needed to add Grafana on top of this, I quickly reached for a <a href="https://github.com/pellepelster/graphite-grafana-vagrant-box">Vagrant VM setup</a> that worked very well, but I didn't want to rely on a Vagrant image when I actually tried to deploy this later. </p>
+=======
+<p>The widely-adopted general-purpose monitoring choice seems to be <a href="http://graphite.readthedocs.org/en/1.0/overview.html">Graphite</a>. I found it very difficult to set up, owing to inconsistent documentation (for example, the top google hit for <a href="https://www.google.ch/webhp?sourceid=chrome-instant&amp;ion=1&amp;espv=2&amp;ie=UTF-8#q=graphite%20monitoring">"graphite monitoring"</a> takes you to outdated docs) and many components that need to play nice together. I spent a day configuring graphite/carbon and had a working system after some headache. When I needed to add Grafana on top of this, I quickly reached for a <a href="https://github.com/pellepelster/graphite-grafana-vagrant-box">Vagrant VM setup</a> that worked very well, but I didn't want to rely on a Vagrant image when I actually tried to deploy this later. </p>
+>>>>>>> b4a600f7d76da6ee276fbe30859e770185654699
 <p>In addition, the built-in Graphite UI is pretty basic at best. The plotting is rather cumbersome and outdated, though I'm sure it's possible to set up nice dashboards with some effort. Still, it was very useful as an initial metrics browser, just to get a feeling for what is being reported. </p>
 <h3>Prometheus</h3>
 <p>A colleague pointed me to <a href="http://prometheus.io/">Prometheus</a> which on the other hand took me about five seconds to get running. No database/apache configurations needed. Just <a href="https://github.com/prometheus/prometheus/releases">download the appropriate release</a> and go. Alternatively, you can <a href="http://prometheus.io/docs/introduction/install/#using-docker">run it easily via docker</a>.</p>
@@ -134,7 +138,15 @@ Data Blog            </a>
 <h3>Grafana</h3>
 <p>I haven't experimented very much with the visualization front-end but went straight for <a href="http://grafana.org/">Grafana</a>. It was designed to be used with Graphite, but it is now possible to seamlessly insert Prometheus as a data source. Grafana looks good, has nice functionality, and seems fairly general so it seemed like a pretty safe choice. </p>
 <h2>Connecting Spark with Prometheus</h2>
+<<<<<<< HEAD
 <p class="alert alert-info"><strong>Note:</strong> Before you continue here, make sure your Prometheus instance is running and you can reach it at <a href="http://localhost:9090">http://localhost:9090</a> or whatever other port you configured.</p>
+=======
+<<<<<<< HEAD
+<p class="alert alert-info"><strong>Note:</strong> Before you continue here, make sure your Prometheus instance is running and you can reach it at <a href="http://localhost:9090">http://localhost:9090</a> or whatever other port you configured.</p>
+=======
+<p class="alert alert-info"><strong>Note:</strong> Before you continue here, make sure your Prometheus instance is running and you can reach it at http://localhost:9090 or whatever other port you configured.</p>
+>>>>>>> 2fcc23d480a2e429e4ed9b251d285de8df46c2ec
+>>>>>>> b4a600f7d76da6ee276fbe30859e770185654699
 
 <p>Spark doesn't have Prometheus as one of the pre-packaged sinks - so the strategy here is to export Graphite metrics feed them into Prometheus via an exporter plugin. To report metrics to Graphite, you must set up metrics via a <code>metrics.properties</code> file. You can put this in <code>$SPARK_HOME/config</code> or pass it to spark on the command line by using  <code>--conf spark.metrics.conf=/path/to/metrics/file</code> - beware that this path must either exist on all executors. Alternatively you can pass the file to the executors using the <code>--file</code> flag. </p>
 <p>My <code>metrics.properties</code> looks like this: </p>
