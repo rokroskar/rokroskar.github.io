@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en"
+>
+<head>
+    <title>Monitoring Spark on Hadoop with Prometheus and Grafana - Data Blog</title>
+    <!-- Using the latest rendering mode for IE -->
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+
+
+<link rel="canonical" href="/drafts/monitoring-spark-on-hadoop-with-prometheus-and-grafana.html">
+
+        <meta name="author" content="Rok" />
+        <meta name="keywords" content="spark,prometheus,metrics,jvm,graphite,grafana" />
+        <meta name="description" content="Using the Spark metrics system via Prometheus to gain insight into the application performance." />
+
+        <meta property="og:site_name" content="Data Blog" />
+        <meta property="og:type" content="article"/>
+        <meta property="og:title" content="Monitoring Spark on Hadoop with Prometheus and Grafana"/>
+        <meta property="og:url" content="/drafts/monitoring-spark-on-hadoop-with-prometheus-and-grafana.html"/>
+        <meta property="og:description" content="Using the Spark metrics system via Prometheus to gain insight into the application performance."/>
+        <meta property="article:published_time" content="2015-12-16" />
+            <meta property="article:section" content="spark" />
+            <meta property="article:tag" content="spark" />
+            <meta property="article:tag" content="prometheus" />
+            <meta property="article:tag" content="metrics" />
+            <meta property="article:tag" content="jvm" />
+            <meta property="article:tag" content="graphite" />
+            <meta property="article:tag" content="grafana" />
+            <meta property="article:author" content="Rok" />
+
+
+    <!-- Bootstrap -->
+        <link rel="stylesheet" href="/theme/css/bootstrap.min.css" type="text/css"/>
+    <link href="/theme/css/font-awesome.min.css" rel="stylesheet">
+
+    <link href="/theme/css/pygments/native.css" rel="stylesheet">
+    <link rel="stylesheet" href="/theme/css/style.css" type="text/css"/>
+
+
+</head>
+<body>
+
+<div class="navbar navbar-default navbar-fixed-top" role="navigation">
+	<div class="container">
+        <div class="navbar-header">
+            <button type="button" class="navbar-toggle" data-toggle="collapse" data-target=".navbar-ex1-collapse">
+                <span class="sr-only">Toggle navigation</span>
+                <span class="icon-bar"></span>
+                <span class="icon-bar"></span>
+                <span class="icon-bar"></span>
+            </button>
+            <a href="/" class="navbar-brand">
+Data Blog            </a>
+        </div>
+        <div class="collapse navbar-collapse navbar-ex1-collapse">
+            <ul class="nav navbar-nav">
+            </ul>
+            <ul class="nav navbar-nav navbar-right">
+              <li><a href="/archives.html"><i class="fa fa-th-list"></i><span class="icon-label">Archives</span></a></li>
+            </ul>
+        </div>
+        <!-- /.navbar-collapse -->
+    </div>
+</div> <!-- /.navbar -->
+<!-- Banner -->
+<!-- End Banner -->
+<div class="container">
+    <div class="row">
+        <div class="col-sm-9">
+
+    <section id="content">
+        <article>
+            <header class="page-header">
+                <h1>
+                    <a href="/drafts/monitoring-spark-on-hadoop-with-prometheus-and-grafana.html"
+                       rel="bookmark"
+                       title="Permalink to Monitoring Spark on Hadoop with Prometheus and Grafana">
+                        Monitoring Spark on Hadoop with Prometheus and Grafana
+                    </a>
+                </h1>
+            </header>
+            <div class="entry-content">
+                <div class="panel">
+                    <div class="panel-body">
+<footer class="post-info">
+    <span class="label label-default">Date</span>
+    <span class="published">
+        <i class="fa fa-calendar"></i><time datetime="2015-12-16T00:00:00+01:00"> Wed 16 December 2015</time>
+    </span>
+
+
+
+<span class="label label-default">Tags</span>
+	<a href="/tag/spark.html">spark</a>
+        /
+	<a href="/tag/prometheus.html">prometheus</a>
+        /
+	<a href="/tag/metrics.html">metrics</a>
+        /
+	<a href="/tag/jvm.html">jvm</a>
+        /
+	<a href="/tag/graphite.html">graphite</a>
+        /
+	<a href="/tag/grafana.html">grafana</a>
+    
+</footer><!-- /.post-info -->                    </div>
+                </div>
+                <p>Anyone who has spent time developing <a href="http://spark.apache.org">Spark</a> applications (or any other distributed application for that matter) has probably wished for some x-ray goggles into the black-box machinery of the framework. While Spark provides a nice and increasingly feature-rich UI for checking on the status of running tasks and even gives statistics on things like runtime, memory usage, disk I/O etc., there are other aspects of the runtime that can remainan annoying mystery: how is the JVM memory being utilized? How much memory is the driver using? What about garbage collection? As it turns out, all these are reported by <a href="http://spark.apache.org/docs/latest/monitoring.html#metrics">Spark's metrics system</a>: they're out there, you just need to grab them. </p>
+<p>Unfortunately, the documentation regarding the metrics system is incredibly terse. If you also want to combine the Spark-reported metrics with those generated by Hadoop (YARN, HDFS), then you really run into another google-powered goose chase for insights on incomplete and outdated documentation pages and blogs. I was inspired in this goose-chase by an excellent <a href="http://www.hammerlab.org/2015/02/27/monitoring-spark-with-graphite-and-grafana/">blog post</a> showing a nice use of Spark metrics and set off to do this for my own system. </p>
+<h2>Goals</h2>
+<p>My main goals were two-fold: </p>
+<ol>
+<li>use metrics to better understand the JVM runtime of Spark applications</li>
+<li>combine spark, hadoop, and system-level metrics to complement performance benchmarks when making system architecture decisions</li>
+</ol>
+<p>The first is somewhat obvious - tired of mysterious "Out of memory" exceptions, I want more fine-grained information about where, when, and why  the problems arise. </p>
+<p>The second is more complex - we are running a 250+ node "test" Spark/Hadoop cluster on somewhat outdated hardware that is being used a sandbox before we purchase a modern state-of-the-art machine. Benchmarks like Terasort on Hadoop or the <a href="https://github.com/databricks/spark-perf">spark-perf</a> test suite give you timing information but not very much data on what the system is actually doing. What are the raw disk I/O rates on individual nodes? Is the network being saturated? Is HDFS performance hampered by slow disks, network, cpu? When we run the same benchmark on a new system and get a (hopefully) improved time, which of these factors was most important and where could we perhaps downgrade components to save money without sacrificing performance? To answer these questions we really need instrumentation and monitoring. </p>
+<h2>Choices of monitoring backend and visualization</h2>
+<h3>Graphite</h3>
+<p>The widely-adopted general-purpose monitoring choice seems to be <a href="http://graphite.readthedocs.org/en/1.0/overview.html">Graphite</a>. I found it very difficult to set up, owing to inconsistent documentation (for example, the top google hit for <a href="https://www.google.ch/webhp?sourceid=chrome-instant&amp;ion=1&amp;espv=2&amp;ie=UTF-8#q=graphite%20monitoring">"graphite monitoring"</a> takes you to outdated docs) and many components that need to play nice together. I spent a day configuring graphite/carbon and had a working system after some headache. When I needed to add Grafana on top of this, I quickly reached for a <a href="https://github.com/pellepelster/graphite-grafana-vagrant-box">Vagrant VM set up</a> that worked pretty well, but I didn't want to rely on a Vagrant image when I actually tried to deploy this downstream. </p>
+<p>In addition, the built-in Graphite UI is pretty basic at best. The plotting is rather cumbersome and outdated, though I'm sure it's possible to set up nice dashboards with some effort. </p>
+<h3>Prometheus</h3>
+<p>A colleague pointed me to <a href="http://prometheus.io/">Prometheus</a> which on the other hand took me about five seconds to get running. No database/apache configurations needed. Just <a href="https://github.com/prometheus/prometheus/releases">download the appropriate release</a> and go. Alternatively, you can <a href="http://prometheus.io/docs/introduction/install/#using-docker">run it easily via docker</a>.</p>
+<p>As an added bonus, I liked a few features of Prometheus that I hadn't really thought about before trying Graphite:</p>
+<h4>The data model</h4>
+<p>The data model allows you to define metrics which are more like "metric containers" and give them fine-grained specifications using "labels". In essense, the labels are the "dimensions" of each metric. For example, your metric might be "latency" and your labels would be "hostname" and "operating_system". You can then easily look at aggregate statistics on "latency" or drill down seamlessly to get stats per host or per os. Pretty nice. </p>
+<h4>The Query Language</h4>
+<p>This is intimately tied to the data model, but Prometheus comes with a pretty nice query language. Of course you have to learn a few things about the syntax, but once you do it's pretty easy to use and has some nice features that allow you to take advantage of the multi-dimensionality of the metrics. </p>
+<h4>Scraping vs. pushing metrics</h4>
+<p>With Prometheus you have to define endpoints that it will "scrape" -- it doesn't get any data automatically and clients can't push data to it. This is nice if you want some control over potentially noisy sources. You don't have to alter the source, you can just stop scraping it for input temporarily. </p>
+<h3>Grafana</h3>
+<p>I haven't experimented very much with the visualization front-end but went straight for <a href="http://grafana.org/">Grafana</a>. It was designed to be used with Graphite, but it is now possible to seamlessly insert Prometheus as a data source. Grafana looks good, has nice functionality, and seems fairly general so it seemed like a pretty safe choice. </p>
+<h2>Connecting Spark with Prometheus</h2>
+<p class="bg-info"><emph>Note:</emph>Before you continue here, make sure your Prometheus instance is running and you can reach it at http://localhost:9090 or whatever other port you configured.</p>
+
+<p>Spark doesn't have Prometheus as one of the pre-packaged sinks - so the strategy here is to send metrics to Graphite and then feed those into Prometheus. To report metrics to Graphite, you must set up metrics via a <code>metrics.properties</code> file. You can put this in <code>$SPARK_HOME/config</code> or pass it to spark on the command line. </p>
+<p>My <code>metrics.properties</code> looks like this: </p>
+<div class="highlight"><pre>*.sink.graphite.class=org.apache.spark.metrics.sink.GraphiteSink
+*.sink.graphite.host=&lt;metrics_hostname&gt;
+*.sink.graphite.port=&lt;metrics_port&gt;
+*.sink.graphite.period=5
+*.sink.graphite.unit=seconds
+
+# Enable jvm source for instance master, worker, driver and executor
+master.source.jvm.class=org.apache.spark.metrics.source.JvmSource
+
+worker.source.jvm.class=org.apache.spark.metrics.source.JvmSource
+
+driver.source.jvm.class=org.apache.spark.metrics.source.JvmSource
+
+executor.source.jvm.class=org.apache.spark.metrics.source.JvmSource
+</pre></div>
+
+
+<p>Spark's monitoring sinks include Graphite, but not Prometheus. Luckily it's really easy to get Graphite data into Prometheus using the <a href="https://github.com/prometheus/graphite_exporter">Graphite Exporter</a>. This is easy to get running either by building from source or using the Docker image. All you need to do is change the port to which your Graphite clients are sending their metrics and you're set -- the default port is 9109 so make sure you set that in your <code>metrics.properties</code> file. </p>
+<p>You can go to http://localhost:9108/metrics once the exporter is running to see which metrics it has collected - initially it will only have some internal metrics. To get spark metrics in there, make sure you set up the <code>metrics.properties</code> file and try running just the simply pi script:</p>
+<div class="highlight"><pre><span class="nv">$ $SPARK_HOME</span>/bin/spark-submit  --master <span class="nb">local</span><span class="o">[</span>*<span class="o">]</span> <span class="nv">$SPARK_HOME</span>/examples/src/main/python/pi.py 500
+</pre></div>
+
+
+<p>On the http://localhost:9108/metrics you should now see a ton of lines like this: </p>
+<div class="highlight"><pre># HELP local_driver_jvm_heap_init Graphite metric local.driver.jvm.heap.init
+# TYPE local_driver_jvm_heap_init gauge
+local_driver_jvm_heap_init 1.073741824e+09
+# HELP local_driver_jvm_heap_max Graphite metric local-1450274266632.driver.jvm.heap.max
+# TYPE local_driver_jvm_heap_max gauge
+local_driver_jvm_heap_max 1.029177344e+09
+# HELP local_driver_jvm_heap_usage Graphite metric local-1450274266632.driver.jvm.heap.usage
+# TYPE local_driver_jvm_heap_usage gauge
+local_driver_jvm_heap_usage 0.35
+# HELP local_driver_jvm_heap_used Graphite metric local-1450274266632.driver.jvm.heap.used
+# TYPE local_driver_jvm_heap_used gauge
+local_driver_jvm_heap_used 3.60397752e+08
+</pre></div>
+
+
+<p>This is showing us that the forwarding between works, but by default all Graphite metrics are sent across just as 1D metrics to Prometheus, i.e. without any label dimensions. To get the data into the Prometheus data model, we have to set up a mapping. </p>
+<p>The final thing we need to do is to tell Prometheus to scrape our Graphite exporter for data. We do this by adding a job to <code>prometheus.yml</code> below the internal <code>prometheus</code> job declaration: </p>
+<div class="highlight"><pre>  - job_name: &#39;hadoop-test&#39;
+
+    target_groups:
+      - targets: [&#39;localhost:9108&#39;]
+</pre></div>
+
+
+<h3>Mapping Spark's Graphite metrics to Prometheus</h3>
+<p>The one trick here is that if you just send raw Graphite metrics to Prometheus, you will not be able to use the nice Prometheus query language to its fullest because the metrics data will not have labels.</p>
+<p>You can easily define mappings to turn these into proper Prometheus labeled metrics by specifying a mapping config file. Turning these JVM memory metrics into Prometheus metrics can be done with something like this: </p>
+<div class="highlight"><pre>*.*.jvm.*.*
+name=&quot;jvm_memory_usage&quot;
+application=&quot;$1&quot;
+executor_id=&quot;$2&quot;
+mem_type=&quot;$3&quot;
+qty=&quot;$4&quot;
+</pre></div>
+
+
+<p>This instructs the exporter to create a metric named <code>jvm_memory_usage</code> with labels <code>application</code>, <code>executor_id</code>, <code>mem_type</code>, and <code>qty</code>. After we restart the exporter with </p>
+<div class="highlight"><pre>~/graphite_exporter <span class="nv">$ </span>./graphite_exporter -graphite.mapping-config graphite_exporter_mapping
+</pre></div>
+
+
+<p>the metrics now look like this: </p>
+<div class="highlight"><pre>jvm_memory_usage{application=&quot;application_ID&quot;,executor_id=&quot;1&quot;,mem_type=&quot;non-heap&quot;,qty=&quot;committed&quot;} 3.76832e+07
+</pre></div>
+
+
+<p>Great, now we can actually use Prometheus queries on our data!</p>
+<p>Here is my full graphite exporter mappings file that will turn Spark Graphite metrics into something usable in Prometheus: </p>
+<div class="highlight"><pre>*.*.executor.filesystem.*.*
+name=&quot;filesystem_usage&quot;
+application=&quot;$1&quot;
+executor_id=&quot;$2&quot;
+fs_type=&quot;$3&quot;
+qty=&quot;$4&quot;
+
+*.*.jvm.*.*
+name=&quot;jvm_memory_usage&quot;
+application=&quot;$1&quot;
+executor_id=&quot;$2&quot;
+mem_type=&quot;$3&quot;
+qty=&quot;$4&quot;
+
+*.*.jvm.pools.*.*
+name=&quot;jvm_memory_pools&quot;
+application=&quot;$1&quot;
+executor_id=&quot;$2&quot;
+mem_type=&quot;$3&quot;
+qty=&quot;$4&quot;
+
+*.*.executor.threadpool.*
+name=&quot;executor_tasks&quot;
+application=&quot;$1&quot;
+executor_id=&quot;$2&quot;
+qty=&quot;$3&quot;
+
+*.*.BlockManager.*.*
+name=&quot;block_manager&quot;
+application=&quot;$1&quot;
+executor_id=&quot;$2&quot;
+type=&quot;$3&quot;
+qty=&quot;$4&quot;
+
+DAGScheduler.*.*
+name=&quot;DAG_scheduler&quot;
+type=&quot;$1&quot;
+qty=&quot;$2&quot;
+</pre></div>
+
+
+<h2>Exploring metrics in Prometheus</h2>
+<p>Prometheus comes with a simple web UI that should be accessible on http://localhost:9090. This allows you to try out some queries, for example you can enter this query: </p>
+<div class="highlight"><pre>jvm_memory_usage{executor_id=&#39;driver&#39;, qty=&#39;used&#39;, application=&quot;local-1450275288942&quot;}
+</pre></div>
+
+
+<p>but replace the application identifier with your actual application ID and see the values reported back in the "Console" tab or the plot. </p>
+<p><img alt="Basic Prometheus plot" src="/images/basic_prometheus.png" /></p>
+<p>This is nice to get a first look at your data, but for some sort of user-friendly metrics tracking, we'll want to set up Grafana. </p>
+<h2>Using Grafana to Visualize Spark metrics via Prometheus</h2>
+<p>First, <a href="http://grafana.org/download/">download Grafana</a> or use their <a href="http://docs.grafana.org/installation/docker/">Docker container</a>. I found that the build was breaking in ways I wasn't able to debug very quickly so I resorted to using the Docker container for the purposes of testing. </p>
+<p>Once Grafana is running, set up the Prometheus data source:</p>
+<p><img alt="Prometheus data source" src="/images/add_grafana_source.png" /></p>
+<p>Now you are ready to set up some Grafana dashboards! When adding plots, just select the "Prometheus" data source in the bottom right and enter a query. Here's an example: </p>
+<p><img alt="Example of Prometheus plot in Grafana" src="/images/example_grafana_prometheus_plot.png" /></p>
+<p>In this example I'm using a template variable "application_ID" so that I can easily select the application I want. To define your own, go to the "templating" settings: </p>
+<p><img alt="Templating in Grafana" src="/images/grafana_templating.png" /></p>
+<p><img alt="Templating in Grafana" src="/images/grafana_templating_detail.png" /></p>
+<p>See the <a href="http://docs.grafana.org/datasources/prometheus/">Grafana Prometheus documentsion</a> for more information. </p>
+<p>Finally, a complete dashboard for a single Spark application showing some individual and aggregate Spark metrics may look like this: </p>
+<p><img alt="Full Spark Grafana dashboard" src="/images/grafana_full_spark_dashboard.png" /></p>
+<p>You can see the snapshot <a href="https://snapshot.raintank.io/dashboard/snapshot/kHmB0PX9COdomGLCjA9LE3YhWCLVIXp5">here</a>.</p>
+<h2>Future work</h2>
+<p>This is just the beginning of Spark/Prometheus/Grafana integration - next is obviously the collection of Hadoop and system-level metrics. More on this in the next post. </p>
+            </div>
+            <!-- /.entry-content -->
+        </article>
+    </section>
+
+        </div>
+        <div class="col-sm-3" id="sidebar">
+            <aside>
+
+<section class="well well-sm">
+    <ul class="list-group list-group-flush">
+            <li class="list-group-item"><h4><i class="fa fa-home fa-lg"></i><span class="icon-label">Social</span></h4>
+              <ul class="list-group" id="social">
+                <li class="list-group-item"><a href="http://twitter.com/rokstars"><i class="fa fa-twitter-square fa-lg"></i> twitter</a></li>
+                <li class="list-group-item"><a href="https://www.linkedin.com/in/rok-roskar-0702932b"><i class="fa fa-linkedin-square fa-lg"></i> linkedin</a></li>
+                <li class="list-group-item"><a href="http://github.com/rokroskar"><i class="fa fa-github-square fa-lg"></i> github</a></li>
+              </ul>
+            </li>
+
+
+
+    </ul>
+</section>
+            </aside>
+        </div>
+    </div>
+</div>
+<footer>
+   <div class="container">
+      <hr>
+      <div class="row">
+         <div class="col-xs-10">&copy;  Rok Roškar
+            &middot; Powered by <a href="https://github.com/DandyDev/pelican-bootstrap3" target="_blank">pelican-bootstrap3</a>,
+            <a href="http://docs.getpelican.com/" target="_blank">Pelican</a>,
+            <a href="http://getbootstrap.com" target="_blank">Bootstrap</a>              <p><small>  <a rel="license" href="http://creativecommons.org/licenses/by-nc/4.0/"><img alt="Creative Commons License" style="border-width:0" src="//i.creativecommons.org/l/by-nc/4.0/80x15.png" /></a>
+    Content
+  licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-nc/4.0/">Creative Commons Attribution 4.0 International License</a>, except where indicated otherwise.
+</small></p>
+         </div>
+         <div class="col-xs-2"><p class="pull-right"><i class="fa fa-arrow-up"></i> <a href="#">Back to top</a></p></div>
+      </div>
+   </div>
+</footer>
+<script src="/theme/js/jquery.min.js"></script>
+
+<!-- Include all compiled plugins (below), or include individual files as needed -->
+<script src="/theme/js/bootstrap.min.js"></script>
+
+<!-- Enable responsive features in IE8 with Respond.js (https://github.com/scottjehl/Respond) -->
+<script src="/theme/js/respond.min.js"></script>
+
+    <!-- Google Analytics -->
+    <script type="text/javascript">
+
+        var _gaq = _gaq || [];
+        _gaq.push(['_setAccount', 'UA-71475726-1']);
+        _gaq.push(['_trackPageview']);
+
+        (function () {
+            var ga = document.createElement('script');
+            ga.type = 'text/javascript';
+            ga.async = true;
+            ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+            var s = document.getElementsByTagName('script')[0];
+            s.parentNode.insertBefore(ga, s);
+        })();
+    </script>
+    <!-- End Google Analytics Code -->
+
+</body>
+</html>
