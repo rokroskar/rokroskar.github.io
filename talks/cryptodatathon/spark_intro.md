@@ -2,12 +2,13 @@
 
 #### Rok Roškar, Swiss Data Science Center, ETH Zürich
 
+##### Cryptodatathon, Zürich, June 4, 2018
 
 
 ## Who am I?
 
 * PhD in Astrophysics from University of Washington
-* I currently lead the SDSC Renku platform team at ETH Zürich
+* I currently lead the [SDSC Renku platform](https://github.com/SwissDataScienceCenter/renku) team at ETH Zürich
 * Last several years spent solving big-data analysis problems within various scientific domains at ETH
 
 
@@ -182,12 +183,12 @@ Many of these "production" systems based on MapReduce combined with efficient "d
 
 a few key features:
 
-* interactive data exploration
+* interactive data exploration (think jupyter notebooks)
 * keeps data in-memory - good for loop-intensive algorithms
 
 where is it being used?
 
-* mostly internet applications (recommendation engines, usage analysis etc.)
+* internet applications (recommendation engines, log analysis etc.)
 * classic Big Data use cases e.g. text analysis
 * some academia, notably neuroscience
 
@@ -335,6 +336,15 @@ Transformations are evaluated "lazily" - only executed once an *action* is perfo
   in its entirety
 
 
+## PySpark
+
+* Spark is written in Scala, but provides `Python` and `R` wrappers
+* You need to be aware of the data shuffling that occurs behind the scenes!
+
+![PySpark architecture](http://i.imgur.com/YlI8AqEl.png)
+
+
+
 ### Initializing Spark
 ```python
 import pyspark
@@ -420,6 +430,17 @@ Two APIs: "lower"-level RDD API and the more user-friendly DataFrame API
 * [configuration](http://spark.apache.org/docs/latest/configuration.html)
 * [API docs](http://spark.apache.org/docs/latest/api/python/index.html)
 * [ML Guide](http://spark.apache.org/docs/latest/ml-guide.html)
+
+Run spark on your laptop using [Docker](https://www.docker.com/):
+
+```console
+$ docker run --rm -p 8888:8888 -p 4040:4040 jupyter/pyspark-notebook
+```
+
+Or try out some [tutorial notebooks](https://github.com/hopelessoptimism/data-scientists-guide-apache-spark) on mybinder.org (not tested!):
+
+https://mybinder.org/v2/gh/hopelessoptimism/data-scientists-guide-apache-spark/master
+
 
 
 [Five-minute Spark DataFrames demo](dataframe_demo.slides.html#/1)
